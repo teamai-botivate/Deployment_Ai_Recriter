@@ -296,6 +296,7 @@ async def send_assessment(request: EmailRequest, background_tasks: BackgroundTas
 class RejectionRequest(BaseModel):
     emails: list[str]
     job_title: str
+    company_name: Optional[str] = "RecruitAI"
 
 @app.post("/send-rejection")
 async def send_rejection(request: RejectionRequest):
@@ -324,7 +325,7 @@ async def send_rejection(request: RejectionRequest):
                         <p>We will keep your resume in our database and may contact you if a suitable opening arises in the future.</p>
                         <p>We wish you the best in your job search.</p>
                         <br>
-                        <p>Best Regards,<br><strong>Talent Acquisition Team</strong><br>RecruitAI</p>
+                        <p>Best Regards,<br><strong>{request.company_name}</strong><br>RecruitAI</p>
                         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
                         <p style="font-size: 0.8rem; color: #94a3b8; text-align: center;">This is an automated message. Please <strong>do not reply</strong> to this email.</p>
                     </body>
