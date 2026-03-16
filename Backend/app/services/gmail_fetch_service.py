@@ -140,11 +140,8 @@ class GmailFetchService:
                             mime_type = part.get('mimeType', '')
                             attachments_in_email.append(filename)
                             
-                            # Case 1: Direct Resume Files (PDF, TXT, DOC, DOCX)
-                            is_resume = (filename.lower().endswith('.pdf') or 
-                                       filename.lower().endswith('.txt') or
-                                       filename.lower().endswith('.doc') or
-                                       filename.lower().endswith('.docx'))
+                            # Case 1: Direct Resume Files (ONLY PDF)
+                            is_resume = filename.lower().endswith('.pdf')
                             
                             # Case 2: Email Attachments (.eml) - May contain resumes inside
                             is_email_attachment = (filename.lower().endswith('.eml') or 
@@ -214,10 +211,7 @@ class GmailFetchService:
                                         for sub_part in msg_obj.walk():
                                             sub_fname = sub_part.get_filename()
                                             if sub_fname:
-                                                is_nested_resume = (sub_fname.lower().endswith('.pdf') or 
-                                                                  sub_fname.lower().endswith('.txt') or
-                                                                  sub_fname.lower().endswith('.doc') or
-                                                                  sub_fname.lower().endswith('.docx'))
+                                                is_nested_resume = sub_fname.lower().endswith('.pdf')
                                                 
                                                 if is_nested_resume:
                                                     sub_content = sub_part.get_payload(decode=True)
