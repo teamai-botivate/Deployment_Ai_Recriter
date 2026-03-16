@@ -9,14 +9,24 @@ load_dotenv(os.path.join(basedir, "../../.env"))
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def generate_aptitude_questions(jd_text: str):
+def generate_aptitude_questions(jd_text: str, difficulty_level: str = "Medium", custom_instructions: str = "", mcq_count: int = 25):
     """
-    Analyzes the Job Description and generates 25 MCQ questions and 4 Coding questions.
+    Analyzes the Job Description and generates the specified number of MCQ questions and 4 Coding questions.
+    Incorporates difficulty level and additional recruiter instructions.
     """
     
     prompt = f"""
-    Create a recruitment assessment JSON for the following Job Description.
+    Create a recruitment assessment JSON based on the provided Job Description and specific difficulty requirements.
     
+    DIFFICULTY LEVEL: {difficulty_level}
+    TOTAL MCQs REQUIRED: {mcq_count}
+    ADDITIONAL RECRUITER INSTRUCTIONS: {custom_instructions if custom_instructions else "None"}
+
+    DIFFICULTY DEFINITIONS:
+    - Low: Basic syntax, core concepts, entry-level definitions.
+    - Medium: Application-based questions, 2-4 years industry experience level, common edge cases.
+    - Hard: Advanced internals, complex logical reasoning, system design patterns, high-level algorithms, 5+ years expert level.
+
     REQUIRED JSON STRUCTURE:
     {{
       "mcqs": [
@@ -43,10 +53,11 @@ def generate_aptitude_questions(jd_text: str):
     }}
 
     RULES:
-    1. Generate 25 MCQs.
-    2. If the JD is technical (CS/IT), generate 4 Coding Questions. Otherwise, "coding_questions" must be [].
-    3. Coding questions must be role-agnostic DSA (MNC style).
-    4. OUTPUT ONLY THE JSON. NO EXPLANATION.
+    1. Generate exactly {mcq_count} MCQs.
+    2. STATED DIFFICULTY IS MANDATORY. If "Hard" is selected, questions must be highly challenging and expert-level. Avoid trivial or basic questions.
+    3. If the JD is technical (CS/IT), generate 4 Coding Questions. Otherwise, "coding_questions" must be [].
+    4. Coding questions must match the {difficulty_level} level (e.g., Hard = Graph/Dynamic Programming, Low = Array/String manipulation).
+    5. OUTPUT ONLY THE JSON. NO EXPLANATION.
 
     JOB DESCRIPTION:
     {jd_text}
@@ -58,7 +69,7 @@ def generate_aptitude_questions(jd_text: str):
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a JSON-only generator. You honeslty follow the requested schema and never omit fields."},
+                {"role": "system", "content": "You are an expert technical interviewer and JSON generator. You strictly adhere to the requested DIFFICULTY LEVEL. For 'Hard', you provide complex, expert-level questions. For 'Medium', intermediate professional level. For 'Low', foundational basic level."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.0,

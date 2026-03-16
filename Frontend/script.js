@@ -287,15 +287,24 @@ if (gmailCheckbox) {
 }
 
 // Initialization on load
-window.addEventListener('load', () => {
-    // Always start as disabled on refresh as requested
+window.addEventListener('load', async () => {
+    // Check Gmail connection status in background
+    const isConnected = await checkGmailConnection();
+    
     if (gmailCheckbox) {
-        gmailCheckbox.checked = false;
-        gmailConnection.classList.add('hidden');
-        gmailInputs.classList.add('hidden');
+        if (isConnected) {
+            // If connected, enable sync toggle and show areas automatically
+            gmailCheckbox.checked = true;
+            gmailConnection.classList.remove('hidden');
+            gmailInputs.classList.remove('hidden');
+            console.log("✅ Gmail connected: Preserving sync state.");
+        } else {
+            // Not connected: strictly keep disabled
+            gmailCheckbox.checked = false;
+            gmailConnection.classList.add('hidden');
+            gmailInputs.classList.add('hidden');
+        }
     }
-    // Still check status in background, but it won't be shown until toggle is enabled
-    checkGmailConnection();
 });
 
 // --- Analysis Engine ---

@@ -67,6 +67,31 @@
                     <div id="file-name" class="file-name-display">No file chosen</div>
                 </div>
 
+                <!-- Custom Logic Inputs -->
+                <div class="config-grid animate-fade-in" style="margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="input-group">
+                        <label class="field-label">Difficulty Level</label>
+                        <select id="difficulty-level" class="glass-select">
+                            <option value="Low">Low (Entry Level)</option>
+                            <option value="Medium" selected>Medium (Intermediate)</option>
+                            <option value="Hard">Hard (Expert/Senior)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label class="field-label">Total MCQs to Generate</label>
+                        <select id="mcq-count" class="glass-select">
+                            <option value="10">10 Questions</option>
+                            <option value="15">15 Questions</option>
+                            <option value="25" selected>25 Questions</option>
+                            <option value="30">30 Questions</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="input-group animate-fade-in" style="margin-top: 10px;">
+                    <label class="field-label">Describe your requirements to AI (Optional)</label>
+                    <textarea id="custom-instructions" class="glass-textarea" placeholder="e.g. Focus more on React hooks and system design, avoid basic JS syntax questions..." rows="3"></textarea>
+                </div>
+
                 <div class="action-footer">
                     <button id="generate-aptitude-btn" class="primary-btn pulse-on-hover">
                         <span>Generate Aptitude Questions</span>
@@ -122,8 +147,8 @@
                 </div>
 
                 <div class="selection-tabs">
-                    <button class="tab-btn active" data-tab="mcqs">MCQs (25)</button>
-                    <button class="tab-btn" data-tab="coding">Coding Questions (4)</button>
+                    <button id="mcq-tab-btn" class="tab-btn active" data-tab="mcqs">MCQs (0)</button>
+                    <button id="coding-tab-btn" class="tab-btn" data-tab="coding">Coding Questions (0)</button>
                 </div>
 
                 <div id="mcq-selection-view" class="tab-content">
@@ -436,11 +461,20 @@
                     <button class="close-modal" id="close-confirm"><i data-lucide="x"></i></button>
                 </div>
                 <div class="modal-body">
-                    <p id="confirm-message">Are you sure?</p>
+                    <div id="confirm-icon-wrapper" style="margin-bottom: 20px; display: flex; justify-content: center;">
+                        <div class="header-icon-circle" style="width: 50px; height: 50px; background: rgba(99, 102, 241, 0.1); color: var(--primary);">
+                            <i data-lucide="help-circle" id="confirm-icon-dynamic"></i>
+                        </div>
+                    </div>
+                    <p id="confirm-message" style="font-weight: 500; font-size: 1.05rem; color: var(--text-main);">Are you sure?</p>
                 </div>
                 <div class="modal-footer">
                     <button class="glass-btn" id="confirm-cancel-btn">Cancel</button>
                     <button class="primary-btn" id="confirm-ok-btn">OK</button>
+                    <button class="primary-btn hidden" id="confirm-gmail-btn">
+                        <i data-lucide="mail" style="width: 18px; margin-right: 8px;"></i>
+                        <span>Connect Gmail</span>
+                    </button>
                 </div>
             </div>
         </div>

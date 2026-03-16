@@ -280,10 +280,8 @@
                 // If no MCQs, go straight to coding setup
                 if (assessmentData.mcqs.length === 0) currentSection = 'coding';
                 
-                document.getElementById('start-btn').disabled = false;
-                document.getElementById('start-btn').style.opacity = "1";
-                document.getElementById('start-btn').style.cursor = "pointer";
-                document.getElementById('start-btn-text').textContent = "Start Assessment Now";
+                // The start button will be enabled by the proctoring logic after face verification
+                document.getElementById('start-btn-text').textContent = "Waiting for Camera...";
                 
             } catch (err) {
                 alert(err.message);
@@ -492,13 +490,24 @@
         };
 
         // --- Proctoring Logic ---
+        let isCameraVerified = false;
+        let verificationInterval = null;
+
         async function setupProctoring() {
+            const startBtn = document.getElementById('start-btn');
+            const startBtnText = document.getElementById('start-btn-text');
+
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 document.getElementById('monitor-vid').srcObject = stream;
+                
+                startBtnText.textContent = "Verifying Camera & Face...";
+                startBtn.style.background = "#94a3b8"; // Gray while verifying
             } catch (e) {
                 console.warn("Camera blocked");
-                cheated = true;
+                startBtnText.textContent = "Error: Camera Access Required";
+                startBtn.classList.add('error-state');
+                return;
             }
 
             document.addEventListener('visibilitychange', () => {
@@ -507,20 +516,56 @@
                 }
             });
 
-            // Start Face Monitoring
+            // Start Face Monitoring & Initial Verification
             startFaceMonitoring();
             
             // Make Camera Badge Draggable
             makeDraggable(document.getElementById('camera-badge'));
         }
 
-        function triggerWarning(msg) {
+        function isCameraBlack(video) {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 48;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                let totalBrightness = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    totalBrightness += (data[i] + data[i+1] + data[i+2]) / 3;
+                }
+                const avgBrightness = totalBrightness / (data.length / 4);
+                return avgBrightness < 20; // Threshold for black screen/shutter off
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function triggerWarning(msg, isBlocking = false) {
             if (!isAssessmentActive) return;
-            if (Date.now() < proctoringPausedUntil) return; // Skip if paused due to button click
-            warningCount++;
+            if (!isBlocking && Date.now() < proctoringPausedUntil) return; // Skip minor warnings if paused
+            
+            if (!isBlocking) warningCount++;
+            
+            const warningScreen = document.getElementById('warning-screen');
+            const dismissBtn = warningScreen.querySelector('button');
+            
             document.getElementById('warning-msg').textContent = msg;
             document.getElementById('warnings-left').textContent = Math.max(0, MAX_WARNINGS - warningCount);
-            document.getElementById('warning-screen').classList.remove('hidden');
+            
+            if (isBlocking) {
+                dismissBtn.classList.add('hidden');
+                warningScreen.style.background = "rgba(0, 0, 0, 0.98)"; // Total block
+                warningScreen.querySelector('h1').textContent = "PORTAL BLOCKED";
+            } else {
+                dismissBtn.classList.remove('hidden');
+                warningScreen.style.background = "rgba(220, 38, 38, 0.95)";
+                warningScreen.querySelector('h1').textContent = "SECURITY VIOLATION!";
+            }
+            
+            warningScreen.classList.remove('hidden');
         }
 
         function dismissWarning() {
@@ -569,65 +614,119 @@
                 ]);
                 
                 const video = document.getElementById('monitor-vid');
+                const startBtn = document.getElementById('start-btn');
+                const startBtnText = document.getElementById('start-btn-text');
+                
                 let faceMissingCount = 0;
                 let lookingAwayCount = 0;
                 let talkingCount = 0;
+                let verifiedCycles = 0;
 
                 setInterval(async () => {
                     const isWarningShowing = !document.getElementById('warning-screen').classList.contains('hidden');
-                    if (!isWarningShowing && video.readyState === 4) {
+                    
+                    if (video.readyState === 4) {
+                        const blackScreen = isCameraBlack(video);
                         const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
                         
-                        if (detections.length === 0) {
-                            faceMissingCount++;
-                            if (faceMissingCount >= 3) {
-                                triggerWarning("Face not detected! Please stay focused on the screen.");
-                                faceMissingCount = 0;
+                        // Verification Logic for Start Button
+                        if (!isAssessmentActive && !isCameraVerified) {
+                            if (blackScreen) {
+                                startBtnText.textContent = "Camera Blocked or Too Dark";
+                                startBtn.disabled = true;
+                                startBtn.style.background = "#ef4444";
+                                verifiedCycles = 0;
+                            } else if (detections.length === 0) {
+                                startBtnText.textContent = "Position Face in Frame...";
+                                startBtn.disabled = true;
+                                startBtn.style.background = "#f59e0b";
+                                verifiedCycles = 0;
+                            } else if (detections.length > 1) {
+                                startBtnText.textContent = "Multiple Faces Detected";
+                                startBtn.disabled = true;
+                                startBtn.style.background = "#ef4444";
+                                verifiedCycles = 0;
+                            } else {
+                                verifiedCycles++;
+                                if (verifiedCycles >= 3) { // Require 3 seconds of clear face
+                                    isCameraVerified = true;
+                                    startBtn.disabled = false;
+                                    startBtn.style.opacity = "1";
+                                    startBtn.style.background = "var(--primary)";
+                                    startBtn.style.cursor = "pointer";
+                                    startBtnText.textContent = "Start Assessment Now";
+                                } else {
+                                    startBtnText.textContent = `Verifying... ${verifiedCycles}/3`;
+                                }
                             }
-                        } else if (detections.length > 1) {
-                            triggerWarning("Multiple faces detected! Please ensure you are alone.");
-                            faceMissingCount = 0;
-                        } else {
-                            faceMissingCount = 0;
-                            const landmarks = detections[0].landmarks;
-                            
-                            // 1. Detect Looking Away (Orientation Heuristic)
-                            const nose = landmarks.getNose();
-                            const leftEye = landmarks.getLeftEye();
-                            const rightEye = landmarks.getRightEye();
-                            
-                            const eyeCenterDist = rightEye[0].x - leftEye[3].x;
-                            const noseToLeftEye = nose[0].x - leftEye[3].x;
-                            const noseToRightEye = rightEye[0].x - nose[0].x;
-                            
-                            const symmetryRatio = noseToLeftEye / noseToRightEye;
-                            
-                            // 2. Detect Talking (Mouth Opening Heuristic)
-                            const mouth = landmarks.getMouth();
-                            // Distance between inner lip top and bottom
-                            const mouthGap = Math.abs(mouth[14].y - mouth[18].y);
-                            const mouthRatio = mouthGap / eyeCenterDist;
+                        }
 
-                            // Thresholds: Symmetry < 0.35 or > 2.8 indicates head turned (relaxed)
-                            if (symmetryRatio < 0.35 || symmetryRatio > 2.8) {
-                                lookingAwayCount++;
-                                if (lookingAwayCount >= 3) {
-                                    triggerWarning("Please look straight at the screen. Looking away is prohibited.");
+                        // Active Assessment Proctoring
+                        if (isAssessmentActive) {
+                            if (blackScreen) {
+                                triggerWarning("Camera is blocked! Please ensure you are visible.", true);
+                            } else if (detections.length === 0) {
+                                faceMissingCount++;
+                                if (faceMissingCount >= 3) {
+                                    triggerWarning("Face not detected! Please stay focused on the screen.", true);
+                                    faceMissingCount = 0;
+                                }
+                            } else if (detections.length > 1) {
+                                triggerWarning("Multiple faces detected! Please ensure you are alone.", true);
+                                faceMissingCount = 0;
+                            } else {
+                                // If conditions are fixed, and it was a BLOCKING warning, dismiss it
+                                const warningScreen = document.getElementById('warning-screen');
+                                const isBlocking = !warningScreen.querySelector('button').classList.contains('hidden');
+                                if (!warningScreen.classList.contains('hidden') && !isBlocking) {
+                                     // Actually checking if the dismiss button is hidden tells us if it's blocking
+                                     const isCurrentlyBlocked = warningScreen.querySelector('button').classList.contains('hidden');
+                                     if (isCurrentlyBlocked) {
+                                         dismissWarning();
+                                     }
+                                }
+
+                                faceMissingCount = 0;
+                                const landmarks = detections[0].landmarks;
+                                
+                                // 1. Detect Looking Away (Orientation Heuristic)
+                                const nose = landmarks.getNose();
+                                const leftEye = landmarks.getLeftEye();
+                                const rightEye = landmarks.getRightEye();
+                                
+                                const eyeCenterDist = rightEye[0].x - leftEye[3].x;
+                                const noseToLeftEye = nose[0].x - leftEye[3].x;
+                                const noseToRightEye = rightEye[0].x - nose[0].x;
+                                
+                                const symmetryRatio = noseToLeftEye / noseToRightEye;
+                                
+                                // 2. Detect Talking (Mouth Opening Heuristic)
+                                const mouth = landmarks.getMouth();
+                                // Distance between inner lip top and bottom
+                                const mouthGap = Math.abs(mouth[14].y - mouth[18].y);
+                                const mouthRatio = mouthGap / eyeCenterDist;
+    
+                                // Thresholds: Symmetry < 0.35 or > 2.8 indicates head turned (relaxed)
+                                if (symmetryRatio < 0.35 || symmetryRatio > 2.8) {
+                                    lookingAwayCount++;
+                                    if (lookingAwayCount >= 3) {
+                                        triggerWarning("Please look straight at the screen. Looking away is prohibited.");
+                                        lookingAwayCount = 0;
+                                    }
+                                } else {
                                     lookingAwayCount = 0;
                                 }
-                            } else {
-                                lookingAwayCount = 0;
-                            }
-
-                            // mouthRatio > 0.2 typically means mouth is open/talking
-                            if (mouthRatio > 0.18) {
-                                talkingCount++;
-                                if (talkingCount >= 3) {
-                                    triggerWarning("Talking or suspicious lip movement detected.");
+    
+                                // mouthRatio > 0.2 typically means mouth is open/talking
+                                if (mouthRatio > 0.18) {
+                                    talkingCount++;
+                                    if (talkingCount >= 3) {
+                                        triggerWarning("Talking or suspicious lip movement detected.");
+                                        talkingCount = 0;
+                                    }
+                                } else {
                                     talkingCount = 0;
                                 }
-                            } else {
-                                talkingCount = 0;
                             }
                         }
                     }

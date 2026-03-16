@@ -44,7 +44,8 @@ let selectionSection, questionsList, selectedCount, selectAllCheckbox, doneBtn;
 let finalResultSection, finalAptitudeList, finalCodingList, codingQuestionsList, selectAllCoding;
 let copyBtn, downloadPdfBtn, emailBtn;
 let emailModal, closeEmailModal, cancelEmailBtn, confirmSendEmailBtn, receiverEmailsInput;
-let viewAnalysisBtn, analysisDashboard, mainGeneratorCard, jobRolesView, candidateDetailsView, detailJobTitleText, candidatesTbody;
+let viewAnalysisBtn, analysisDashboard, mainGeneratorCard, jobRolesView, candidateDetailsView, detailJobTitleText, candidatesTbody, mcqTabBtn, codingTabBtn, confirmGmailBtn;
+let confirmModal, confirmTitle, confirmMsg, confirmOkBtn, confirmCancelBtn, closeConfirmBtn, confirmIconDynamic;
 let currentAptitudeCandidates = []; // Persists full candidate objects from screening
 
 // --- Utilities ---
@@ -65,6 +66,9 @@ function initializeElements() {
     fileInput = document.getElementById('file-upload');
     fileNameDisplay = document.getElementById('file-name');
     loader = document.getElementById('loader');
+    difficultyLevelInput = document.getElementById('difficulty-level');
+    customInstructionsInput = document.getElementById('custom-instructions');
+    mcqCountInput = document.getElementById('mcq-count');
 
     selectionSection = document.getElementById('selection-section');
     questionsList = document.getElementById('questions-list');
@@ -111,6 +115,18 @@ function initializeElements() {
     analyticsContent = document.getElementById('analytics-content');
     answerKeyModal = document.getElementById('answer-key-modal');
     answerKeyContent = document.getElementById('answer-key-content');
+
+    mcqTabBtn = document.getElementById('mcq-tab-btn');
+    codingTabBtn = document.getElementById('coding-tab-btn');
+    confirmGmailBtn = document.getElementById('confirm-gmail-btn');
+
+    confirmModal = document.getElementById('confirm-modal');
+    confirmTitle = document.getElementById('confirm-title');
+    confirmMsg = document.getElementById('confirm-message');
+    confirmOkBtn = document.getElementById('confirm-ok-btn');
+    confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+    closeConfirmBtn = document.getElementById('close-confirm');
+    confirmIconDynamic = document.getElementById('confirm-icon-dynamic');
 }
 
 function setupEventListeners() {
@@ -144,10 +160,19 @@ function setupEventListeners() {
         showLoader(true);
 
         try {
+            const difficultyLevel = difficultyLevelInput.value;
+            const customInstructions = customInstructionsInput.value.trim();
+            const mcqCount = parseInt(mcqCountInput.value) || 25;
+
             const response = await fetch('/aptitude-api/generate-aptitude', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jd_text: jdText })
+                body: JSON.stringify({ 
+                    jd_text: jdText,
+                    difficulty_level: difficultyLevel,
+                    custom_instructions: customInstructions,
+                    mcq_count: mcqCount
+                })
             });
 
             if (!response.ok) throw new Error("Failed to generate questions");
@@ -159,6 +184,10 @@ function setupEventListeners() {
 
             renderMcqsToSelect();
             renderCodingToSelect();
+
+            // Update tab labels with actual counts
+            if (mcqTabBtn) mcqTabBtn.textContent = `MCQs (${allMcqs.length})`;
+            if (codingTabBtn) codingTabBtn.textContent = `Coding Questions (${allCodingQuestions.length})`;
 
             showLoader(false);
             showSection(selectionSection);
@@ -305,7 +334,12 @@ function setupEventListeners() {
             receiverEmailsInput.value = '';
         } catch (error) {
             console.error(error);
-            showCustomAlert("❌ Error", "Failed to complete request: " + error.message);
+            const msg = error.message || "";
+            if (msg.includes("blocked (SMTP)") || msg.includes("connect Gmail")) {
+                showGmailConnectAlert("📧 Mail Sync Required", "To send assessments from Hugging Face, you must connect your Gmail account via OAuth.");
+            } else {
+                showCustomAlert("❌ Error", "Failed to complete request: " + msg);
+            }
         } finally {
             confirmSendEmailBtn.innerHTML = '<span>Send Assessment</span><i data-lucide="send"></i>';
             confirmSendEmailBtn.disabled = false;
@@ -661,22 +695,25 @@ function simulatePdfDownload() {
 }
 
 // --- Custom Modal Helper ---
-const confirmModal = document.getElementById('confirm-modal');
-const confirmTitle = document.getElementById('confirm-title');
-const confirmMsg = document.getElementById('confirm-message');
-const confirmOkBtn = document.getElementById('confirm-ok-btn');
-const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
-const closeConfirmBtn = document.getElementById('close-confirm');
 
 function showCustomAlert(title, message) {
     confirmTitle.textContent = title;
     confirmMsg.textContent = message;
+    
+    // Set Info/Alert icon
+    if (confirmIconDynamic) {
+        confirmIconDynamic.setAttribute('data-lucide', 'info');
+        lucide.createIcons({ root: confirmModal });
+    }
+
     confirmCancelBtn.classList.add('hidden');
     confirmModal.classList.remove('hidden');
     return new Promise((resolve) => {
         const handleOk = () => {
             confirmModal.classList.add('hidden');
             confirmOkBtn.removeEventListener('click', handleOk);
+            // Reset icon
+            if (confirmIconDynamic) confirmIconDynamic.setAttribute('data-lucide', 'help-circle');
             resolve(true);
         };
         confirmOkBtn.addEventListener('click', handleOk);
@@ -712,6 +749,80 @@ function showCustomConfirm(title, message) {
 
 window.showCustomAlert = showCustomAlert;
 window.showCustomConfirm = showCustomConfirm;
+
+// --- Gmail OAuth Logic (Direct from Popup) ---
+const API_BASE = window.location.origin;
+const COMPANY_ID = 'default_company';
+
+async function showGmailConnectAlert(title, message) {
+    confirmTitle.textContent = title;
+    confirmMsg.textContent = message;
+    
+    // Set Mail Icon
+    if (confirmIconDynamic) {
+        confirmIconDynamic.setAttribute('data-lucide', 'mail');
+        lucide.createIcons({ root: confirmModal });
+    }
+    
+    confirmCancelBtn.classList.remove('hidden'); // Show cancel
+    confirmOkBtn.classList.add('hidden');       // Hide normal OK
+    confirmGmailBtn.classList.remove('hidden'); // Show Connect button
+    confirmModal.classList.remove('hidden');
+
+    return new Promise((resolve) => {
+        const handleConnect = () => {
+            connectGmail();
+            cleanup();
+            resolve(true);
+        };
+        const handleCancel = () => {
+            confirmModal.classList.add('hidden');
+            cleanup();
+            resolve(false);
+        };
+        const cleanup = () => {
+            confirmGmailBtn.removeEventListener('click', handleConnect);
+            confirmCancelBtn.removeEventListener('click', handleCancel);
+            closeConfirmBtn.removeEventListener('click', handleCancel);
+            // Restore buttons and icon for next alert
+            confirmOkBtn.classList.remove('hidden');
+            confirmGmailBtn.classList.add('hidden');
+            if (confirmIconDynamic) {
+                confirmIconDynamic.setAttribute('data-lucide', 'help-circle');
+            }
+        };
+
+        confirmGmailBtn.addEventListener('click', handleConnect);
+        confirmCancelBtn.addEventListener('click', handleCancel);
+        closeConfirmBtn.addEventListener('click', handleCancel);
+    });
+}
+
+function connectGmail() {
+    confirmModal.classList.add('hidden');
+    const width = 600;
+    const height = 700;
+    const left = (screen.width - width) / 2;
+    const top = (screen.height - height) / 2;
+
+    const authUrl = `${API_BASE}/auth/gmail/start?company_id=${COMPANY_ID}`;
+    const popup = window.open(authUrl, 'Gmail OAuth', `width=${width},height=${height},left=${left},top=${top}`);
+
+    // Poll for success
+    let attempts = 0;
+    const poller = setInterval(async () => {
+        attempts++;
+        const resp = await fetch(`${API_BASE}/auth/gmail/status?company_id=${COMPANY_ID}`);
+        const data = await resp.json();
+        
+        if (data.connected || attempts > 80 || (popup && popup.closed)) {
+            clearInterval(poller);
+            if (data.connected) {
+                showCustomAlert("✅ Connected", "Gmail synced successfully! You can now send assessments.");
+            }
+        }
+    }, 2000);
+}
 
 // --- Helper: Format Date as DD/MM/YYYY : HH/MM/SS ---
 function formatProctoringDate(timestamp) {

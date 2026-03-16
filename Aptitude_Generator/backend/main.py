@@ -4,6 +4,7 @@ import uuid
 import json
 import time
 import smtplib
+import re # Added for title cleaning
 from typing import List, Optional
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -81,6 +82,9 @@ app.add_middleware(
 
 class JDRequest(BaseModel):
     jd_text: str
+    difficulty_level: Optional[str] = "Medium"
+    custom_instructions: Optional[str] = ""
+    mcq_count: Optional[int] = 25
 
 class RunCodeRequest(BaseModel):
     code: str
@@ -102,6 +106,18 @@ async def run_code(request: RunCodeRequest):
     except Exception as e:
         print(f"Error evaluating code: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Helper Functions ---
+def clean_job_title(title: str) -> str:
+    """Removes experience tags like (0-1 Year), [Remote], etc."""
+    if not title: return ""
+    import re
+    # Remove everything inside parentheses or brackets
+    cleaned = re.sub(r'\(.*?\)|\[.*?\]', '', title)
+    # Remove common experience keywords if they remain
+    cleaned = re.sub(r'(?i)\b(senior|junior|intern|fresher|lead|staff|principal)\b', '', cleaned)
+    # Remove extra spaces
+    return cleaned.strip()
 
 class CandidateItem(BaseModel):
     email: str
@@ -134,7 +150,12 @@ async def generate_aptitude(request: JDRequest):
         raise HTTPException(status_code=400, detail="Job Description text is empty")
     
     try:
-        result = generate_aptitude_questions(request.jd_text)
+        result = generate_aptitude_questions(
+            request.jd_text, 
+            request.difficulty_level, 
+            request.custom_instructions,
+            request.mcq_count
+        )
         return result # returns {"mcqs": [...], "coding_questions": [...]}
     except Exception as e:
         print(f"Error generating content: {e}")
@@ -164,7 +185,8 @@ def update_db_task(request: EmailRequest):
 async def send_assessment(request: EmailRequest, background_tasks: BackgroundTasks):
     print(f"\n--- 📧 REQUEST: Send Assessment to {len(request.candidates)} candidates ---")
     
-    background_tasks.add_task(update_db_task, request)
+    # Run DB update synchronously to ensure the link is valid before emails are received
+    update_db_task(request)
 
     try:
         # --- Gmail OAuth (API-based, safe for Hugging Face) ---
@@ -177,25 +199,29 @@ async def send_assessment(request: EmailRequest, background_tasks: BackgroundTas
             if gmail_oauth_service.is_connected(company_id):
                 print(f"🔗 Using Gmail OAuth API to bypass SMTP network restrictions...")
                 
+                # --- CLEAN JOB TITLE ---
+                clean_title = clean_job_title(request.job_title)
+                
                 format_info = ""
                 if request.mcq_count > 0: format_info += f"<li><strong>Aptitude:</strong> {request.mcq_count} MCQs</li>"
                 if request.coding_count > 0: format_info += f"<li><strong>Coding:</strong> {request.coding_count} DSA Questions</li>"
 
                 for cand in request.candidates:
                     email = cand.email
-                    subject = f"Career Opportunity | {request.job_title} Technical Evaluation"
+                    subject = f"Career Opportunity | {clean_title} Technical Evaluation"
                     body = f"""
                     <html>
                     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
                         <h2 style="color: #6366f1;">Congratulations!</h2>
                         <p>Dear {cand.name},</p>
-                        <p>Your profile for the <strong>{request.job_title}</strong> role has been shortlisted. Please complete the following technical assessment.</p>
+                        <p>Your profile for the <strong>{clean_title}</strong> role has been shortlisted. Please complete the following technical assessment.</p>
                         
                         <div style="background: #f4f4f9; padding: 20px; border-radius: 10px; border-left: 5px solid #6366f1; margin: 20px 0;">
                             <p><strong>Assessment Details:</strong></p>
                             <ul>
                                 {format_info}
                                 <li><strong>Environment:</strong> Online IDE (Multiple Languages Supported)</li>
+                                <li><strong>Mandatory:</strong> Working Camera & Face Verification required to start.</li>
                                 <li><strong>Estimated Time:</strong> 1 Hour</li>
                             </ul>
 
@@ -212,6 +238,7 @@ async def send_assessment(request: EmailRequest, background_tasks: BackgroundTas
                     # Adding No-Reply Header for Gmail API if supported by service, 
                     # else instructions in body are the standard way.
                     gmail_oauth_service.send_email(company_id, email, subject, body)
+                is_sent = True
         except Exception as oauth_e:
             print(f"⚠️ Gmail OAuth Send failed or not connected: {oauth_e}. Falling back to SMTP...")
 
@@ -232,15 +259,18 @@ async def send_assessment(request: EmailRequest, background_tasks: BackgroundTas
                 server.starttls()
                 server.login(str(smtp_user or ""), str(smtp_password or ""))
                 
+                # --- CLEAN JOB TITLE (SMTP) ---
+                clean_title = clean_job_title(request.job_title)
+
                 # ... SMTP Sending Logic ...
                 for cand in request.candidates:
                     email = cand.email
                     msg = MIMEMultipart()
                     msg['From'] = str(smtp_user or "")
                     msg['To'] = str(email or "")
-                    msg['Subject'] = str(f"Career Opportunity | {request.job_title} Technical Evaluation")
+                    msg['Subject'] = str(f"Career Opportunity | {clean_title} Technical Evaluation")
                     msg['Reply-To'] = "no-reply@recruitai.com"
-                    body = f"Technical assessment link for {cand.name}: {request.assessment_link}\n\nThis is an automated email. Please do not reply."
+                    body = f"Technical assessment link for {cand.name}: {request.assessment_link}\n\nCareer Opportunity for {clean_title}.\n\nThis is an automated email. Please do not reply."
                     msg.attach(MIMEText(body, 'plain'))
                     server.send_message(msg)
                 server.quit()
@@ -273,13 +303,16 @@ async def send_rejection(request: RejectionRequest):
             
             if gmail_oauth_service.is_connected(company_id):
                 print(f"🔗 Using Gmail OAuth API for rejections...")
+                
+                clean_title = clean_job_title(request.job_title)
+                
                 for email in request.emails:
-                    subject = f"Update on your application for {request.job_title}"
+                    subject = f"Update on your application for {clean_title}"
                     body = f"""
                     <html>
                     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                         <p>Dear Candidate,</p>
-                        <p>Thank you for giving us the opportunity to consider your application for the <strong>{request.job_title}</strong> position.</p>
+                        <p>Thank you for giving us the opportunity to consider your application for the <strong>{clean_title}</strong> position.</p>
                         <p>We have reviewed your profile, and while we were impressed with your qualifications, we have decided to proceed with other candidates who more closely align with our current requirements.</p>
                         <p>We will keep your resume in our database and may contact you if a suitable opening arises in the future.</p>
                         <p>We wish you the best in your job search.</p>
@@ -308,23 +341,15 @@ async def send_rejection(request: RejectionRequest):
             server = smtplib.SMTP(smtp_server, smtp_port)
             server.starttls()
             server.login(str(smtp_user or ""), str(smtp_password or ""))
-
+            
+            clean_title = clean_job_title(request.job_title)
             for email in request.emails:
                 msg = MIMEMultipart()
                 msg['From'] = str(smtp_user or "")
                 msg['To'] = str(email or "")
-                msg['Subject'] = str(f"Update on your application for {request.job_title}")
-                msg['Reply-To'] = "no-reply@recruitai.com"
-                
-                body = f"""
-                <html><body style="font-family: Arial, sans-serif;">
-                    <p>Dear Candidate,</p>
-                    <p>Thank you for your interest in {request.job_title}. We have decided to move forward with other candidates.</p>
-                    <p>Best Regards,<br>Talent Acquisition Team</p>
-                    <p style="font-size: 0.8rem; color: #777;">Note: This is an automated email. Replies will not be monitored.</p>
-                </body></html>
-                """
-                msg.attach(MIMEText(body, 'html'))
+                msg['Subject'] = str(f"Update on your application for {clean_title}")
+                body_text = f"Dear Candidate,\n\nThank you for applying for the {clean_title} position. After reviewing your profile, we have decided to proceed with other candidates.\n\nBest Regards,\nRecruitAI Team"
+                msg.attach(MIMEText(body_text, 'plain'))
                 server.send_message(msg)
             server.quit()
 
@@ -346,12 +371,12 @@ async def get_assessment(token: str):
     }
 
 @app.post("/submit-assessment")
-async def submit_assessment(data: dict):
+async def submit_assessment(data: dict, background_tasks: BackgroundTasks):
     # data: { token, email, mcq_score, mcq_total, coding_score, coding_total, suspicious, mcq_answers, coding_answers }
     print(f"\n--- 📝 REQUEST: Candidate Submission ({data.get('email')}) ---")
     try:
         db = get_db()
-        db["submissions"].append({
+        submission = {
             "token": data["token"],
             "email": data["email"],
             "mcq_score": data.get("mcq_score", 0),
@@ -362,12 +387,84 @@ async def submit_assessment(data: dict):
             "suspicious": data.get("suspicious", "Normal"),
             "mcq_answers": data.get("mcq_answers", []),
             "coding_answers": data.get("coding_answers", [])
-        })
+        }
+        db["submissions"].append(submission)
         save_db(db)
+
+        # Send notification to Recruiter
+        background_tasks.add_task(send_submission_notification, submission)
+
         return {"status": "success"}
     except Exception as e:
         print(f"❌ Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+def send_submission_notification(submission: dict):
+    """Sends an email to the recruiter when a candidate submits the test."""
+    try:
+        recruiter_email = os.getenv("SMTP_USER")
+        if not recruiter_email:
+            print("⚠️ No SMTP_USER configured, skipping submission email.")
+            return
+
+        # Find job title from token
+        db = get_db()
+        assessment = next((a for a in db["assessments"] if a["token"] == submission["token"]), None)
+        job_title = assessment["job_title"] if assessment else "Unknown Role"
+
+        subject = f"Assessment Submitted: {submission['email']} - {job_title}"
+        
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+            <h2 style="color: #4f46e5;">New Assessment Submission</h2>
+            <p>A candidate has completed their technical evaluation.</p>
+            
+            <div style="background: #f8fafc; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 5px solid #4f46e5;">
+                <p><strong>Candidate:</strong> {submission['email']}</p>
+                <p><strong>Role:</strong> {job_title}</p>
+                <p><strong>MCQ Score:</strong> {submission['mcq_score']} / {submission['mcq_total']}</p>
+                <p><strong>Coding Score:</strong> {submission['coding_score']} / {submission['coding_total']}</p>
+                <p><strong>Proctoring Status:</strong> <span style="color: {'#ef4444' if submission['suspicious'] != 'Normal' else '#10b981'}; font-weight: bold;">{submission['suspicious']}</span></p>
+            </div>
+            
+            <p>You can view full details in the RecruitAI dashboard.</p>
+            <p>Best Regards,<br><strong>RecruitAI Agent</strong></p>
+        </body>
+        </html>
+        """
+
+        # Try Gmail OAuth first
+        is_sent = False
+        try:
+            from services.gmail_oauth import gmail_oauth_service
+            company_id = "default_company"
+            if gmail_oauth_service.is_connected(company_id):
+                gmail_oauth_service.send_email(company_id, recruiter_email, subject, body)
+                is_sent = True
+        except: pass
+
+        # Fallback to SMTP
+        if not is_sent:
+            smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+            smtp_port = int(os.getenv("SMTP_PORT", 587))
+            smtp_password = os.getenv("SMTP_PASSWORD")
+            
+            if recruiter_email and smtp_password:
+                msg = MIMEMultipart()
+                msg['From'] = recruiter_email
+                msg['To'] = recruiter_email # Send to self
+                msg['Subject'] = subject
+                msg.attach(MIMEText(body, 'html'))
+                
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    server.starttls()
+                    server.login(recruiter_email, smtp_password)
+                    server.send_message(msg)
+        
+        print(f"✅ Submission notification sent for {submission['email']}")
+    except Exception as e:
+        print(f"❌ Failed to send submission notification: {e}")
 
 @app.get("/get-analytics")
 async def get_analytics():
@@ -383,14 +480,16 @@ async def schedule_interview(request: ScheduleInterviewRequest):
         
         is_sent = False
         if gmail_oauth_service.is_connected(company_id):
+            clean_title = clean_job_title(request.job_title)
+            
             for email in request.emails:
-                subject = f"Interview Invitation: {request.job_title} Role"
+                subject = f"Interview Invitation: {clean_title} Role"
                 body = f"""
                 <html>
                 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
                     <h2 style="color: #6366f1;">Interview Scheduled!</h2>
                     <p>Dear Candidate,</p>
-                    <p>Congratulations! Based on your assessment results, we would like to invite you for an <strong>offline</strong> interview for the <strong>{request.job_title}</strong> position.</p>
+                    <p>Congratulations! Based on your assessment results, we would like to invite you for an <strong>offline</strong> interview for the <strong>{clean_title}</strong> position.</p>
                     
                     <div style="background: #f4f4f9; padding: 20px; border-radius: 10px; border-left: 5px solid #6366f1; margin: 20px 0;">
                         <p><strong>Interview Details:</strong></p>
@@ -420,13 +519,16 @@ async def schedule_interview(request: ScheduleInterviewRequest):
             server = smtplib.SMTP("smtp.gmail.com", 587)
             server.starttls()
             server.login(str(smtp_user or ""), str(smtp_password or ""))
+            
+            clean_title = clean_job_title(request.job_title)
+            
             for email in request.emails:
                 msg = MIMEMultipart()
                 msg['From'] = str(smtp_user or "")
                 msg['To'] = str(email or "")
-                msg['Subject'] = str(f"Interview Invitation: {request.job_title}")
+                msg['Subject'] = str(f"Interview Invitation: {clean_title}")
                 msg['Reply-To'] = "no-reply@recruitai.com"
-                body_text = f"Your offline interview for {request.job_title} is scheduled on {request.date} at {request.time} at {request.location}.\n\nBest Regards,\n{request.company_name}\nRecruitAI\n\n(Auto-generated email - Do not reply)"
+                body_text = f"Your offline interview for {clean_title} is scheduled on {request.date} at {request.time} at {request.location}.\n\nBest Regards,\n{request.company_name}\nRecruitAI\n\n(Auto-generated email - Do not reply)"
                 msg.attach(MIMEText(body_text, 'plain'))
                 server.send_message(msg)
             server.quit()

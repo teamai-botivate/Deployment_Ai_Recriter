@@ -49,6 +49,16 @@ class GmailOAuthService:
         self.token_dir = self.backend_dir / self.TOKEN_DIR
         self.token_dir.mkdir(exist_ok=True)
         
+        # --- Clear Tokens on Restart (User Request) ---
+        try:
+            import shutil
+            for item in self.token_dir.iterdir():
+                if item.is_file():
+                    item.unlink()
+            print("🧹 Gmail OAuth tokens cleared for fresh start.")
+        except Exception as e:
+            print(f"⚠️ Failed to clear tokens: {e}")
+        
         if not self.client_secret_path.exists():
             print(f"⚠️  WARNING: client_secret.json not found in any standard locations.")
     
@@ -193,15 +203,21 @@ class GmailOAuthService:
         try:
             service = self.get_gmail_service(company_id)
             
-            # --- Scope Verification at Runtime ---
+            # --- Scope & Identity Verification ---
             credentials = self.get_credentials(company_id)
             token_scopes = getattr(credentials, 'scopes', []) or []
+            
+            # Get authenticated email for the 'From' header (crucial for some filters)
+            profile = service.users().getProfile(userId='me').execute()
+            user_email = profile.get('emailAddress')
+
             if 'https://www.googleapis.com/auth/gmail.send' not in token_scopes:
-                raise ValueError("MISSING_SEND_PERMISSION: Gmail is connected but you did not grant permission to 'Send Email'. Please disconnect and reconnect Gmail, ensuring you check the 'Send emails on your behalf' box.")
+                raise ValueError(f"MISSING_SEND_PERMISSION: Connected as {user_email}, but 'Send Email' scope is missing. Please re-authenticate.")
 
             message = EmailMessage()
             message.set_content(body, subtype='html')
             message['To'] = to
+            message['From'] = user_email  # Added explicit From header
             message['Subject'] = subject
             # --- No-Reply Configuration ---
             message['Reply-To'] = 'no-reply@botivate.in'

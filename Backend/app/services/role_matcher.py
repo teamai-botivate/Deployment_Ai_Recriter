@@ -47,6 +47,16 @@ def extract_text_segment(text: str, max_chars: int = 1000) -> str:
     return text[:max_chars].replace('\n', ' ').strip()
 
 
+def clean_role_name(title: str) -> str:
+    """Extracts only the core role name for better AI matching"""
+    if not title: return "Candidate"
+    # Remove patterns like (0-1 Year), [Senior], etc.
+    clean = re.sub(r'[\(\[\{].*?[\)\]\}]', '', title)
+    # Remove common filler words
+    clean = re.sub(r'(?i)(opening|role|position|vacancy|career|immediate|hiring|full-time|part-time)', '', clean)
+    return clean.strip()
+
+
 def extract_potential_role(text: str) -> Optional[str]:
     """Attempts to extract a role string from text"""
     if not text: return None
@@ -115,38 +125,46 @@ def detect_and_match_role(
             "jd_title": jd_title
         }
     
-    logger.info(f"DEBUG: Candidates for '{jd_title}': ['{combined_text[:100]}...']")
+    # Clean JD Title for better labeling
+    core_role = clean_role_name(jd_title)
+    
+    # We use a set of labels to compare. If it matches the JD role better than 
+    # being a "Meeting Minutes" or "Generic Document", then it's a match.
+    labels = [core_role, "Other/Irrelevant Document", "Meeting Minutes (MOM)"]
     
     # Run Zero-Shot Classification
     try:
         classifier = get_zero_shot_classifier()
         
-        # Classify: Does this text match the target role?
+        # Classification: Comparative mode (multi_label=False)
+        # This tells us WHICH label is the best fit.
         result = classifier(
             combined_text,
-            candidate_labels=[jd_title],
-            multi_label=True
+            candidate_labels=labels,
+            multi_label=False
         )
         
-        # Extract score
-        relevance_score = result["scores"][0] if result["scores"] else 0.0
+        # Extract results for our target role
+        scores_map = dict(zip(result["labels"], result["scores"]))
+        relevance_score = scores_map.get(core_role, 0.0)
         
-        logger.info(f"DEBUG: Scores for '{jd_title}': [{relevance_score:.4f}]")
+        logger.info(f"DEBUG: Comparative Scores for '{core_role}': {scores_map}")
         
-        # Determine if it's a match
-        is_match = relevance_score >= threshold
+        # Logic Change: If core_role is the TOP prediction, or its score is > threshold
+        is_top_choice = result["labels"][0] == core_role
+        is_match = is_top_choice or (relevance_score >= threshold)
         
-        # Extract detected role (use email subject as best guess if available)
+        # Extract detected role from text for display
         detected_role_text = clean_subj if email_subject else extract_potential_role(resume_text)
-        if not detected_role_text:
-            detected_role_text = jd_title  # Fallback to JD title
+        if not detected_role_text or len(detected_role_text) < 3:
+            detected_role_text = core_role
         
         return {
             "detected_role": detected_role_text,
-            "source": "zero_shot_classification",
+            "source": "comparative_classification",
             "is_match": is_match,
             "similarity": round(relevance_score, 2),
-            "jd_title": jd_title
+            "jd_title": core_role
         }
         
     except Exception as e:
