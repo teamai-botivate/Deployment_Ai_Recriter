@@ -69,7 +69,8 @@ class GmailFetchService:
 
             # Build search query
             # Search for emails with attachments in date range
-            query = f'has:attachment after:{start_date} before:{effective_end_date}'
+            # Build search query (Target PDFs with recruitment-related keywords)
+            query = f'has:attachment filename:pdf (resume OR cv OR hiring OR job OR application) after:{start_date} before:{effective_end_date}'
             
             logger.info(f"Searching Gmail with query: {query}")
             
@@ -128,13 +129,13 @@ class GmailFetchService:
                     # Extract body (simplified - just get first text part)
                     body = self._extract_body(message['payload'])
                     
-                    # Process attachments
-                    parts = message['payload'].get('parts', [])
+                    # Process ALL attachments (Recursive Search)
+                    all_parts = self._get_all_parts(message['payload'].get('parts', []))
                     attachments_in_email = []
                     extracted_count = 0
                     skipped_count = 0
                     
-                    for part in parts:
+                    for part in all_parts:
                         if part.get('filename'):
                             filename = part['filename']
                             mime_type = part.get('mimeType', '')
@@ -282,6 +283,20 @@ class GmailFetchService:
         except Exception as e:
             logger.warning(f"Could not extract email body: {e}")
             return ""
+
+    def _get_all_parts(self, parts: List[Dict]) -> List[Dict]:
+        """
+        Recursively flatten all parts of an email message
+        """
+        all_parts = []
+        if not parts:
+            return all_parts
+            
+        for part in parts:
+            all_parts.append(part)
+            if 'parts' in part:
+                all_parts.extend(self._get_all_parts(part['parts']))
+        return all_parts
 
 
 # Singleton instance
