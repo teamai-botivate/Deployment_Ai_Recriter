@@ -117,31 +117,34 @@ body {
   box-shadow: var(--glass-shadow);
 }
 
-.training-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 22px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--primary);
-  text-decoration: none;
-  border-radius: 50px;
-  background: rgba(99, 102, 241, 0.08); /* Indigo tint */
-  border: 1.5px solid rgba(99, 102, 241, 0.2);
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  margin-right: 15px;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.05);
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
+/* --- Training Video Premium Button --- */
+/* --- Training Video Premium Force --- */
+#navbar .nav-actions .training-btn,
+.navbar .nav-actions .training-btn {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 10px 24px !important;
+  font-size: 0.9rem !important;
+  font-weight: 700 !important;
+  color: var(--primary) !important;
+  text-decoration: none !important;
+  border-radius: 50px !important;
+  background: rgba(99, 102, 241, 0.1) !important;
+  border: 1.5px solid rgba(99, 102, 241, 0.3) !important;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.08) !important;
+  position: relative !important;
+  cursor: pointer !important;
+  min-width: fit-content !important;
 }
 
-.training-btn i {
-  width: 20px;
-  height: 20px;
-  stroke-width: 2.5px;
-  animation: iconBounce 2s infinite ease-in-out;
+#navbar .nav-actions .training-btn i {
+  width: 20px !important;
+  height: 20px !important;
+  stroke-width: 2.5px !important;
+  color: var(--primary) !important;
+  animation: iconBounce 2s infinite ease-in-out !important;
 }
 
 @keyframes iconBounce {
@@ -149,17 +152,31 @@ body {
   50% { transform: scale(1.2) rotate(5deg); }
 }
 
+#navbar .nav-actions .training-btn:hover,
+.navbar .nav-actions .training-btn:hover,
 .training-btn:hover {
-  background: linear-gradient(135deg, var(--primary), var(--secondary), var(--accent));
-  color: white !important;
+  background: linear-gradient(135deg, var(--primary), var(--secondary), var(--accent)) !important;
+  color: #ffffff !important;
   border-color: transparent !important;
-  transform: translateY(-3px) scale(1.05);
-  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4);
+  transform: translateY(-3px) scale(1.05) !important;
+  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4) !important;
 }
 
-.training-btn:hover i {
-  color: white;
-  animation: none;
+#navbar .nav-actions .training-btn:hover span,
+#navbar .nav-actions .training-btn:hover i,
+#navbar .nav-actions .training-btn:hover svg,
+.navbar .nav-actions .training-btn:hover span,
+.navbar .nav-actions .training-btn:hover i,
+.navbar .nav-actions .training-btn:hover svg,
+.training-btn:hover span,
+.training-btn:hover i,
+.training-btn:hover svg,
+.training-btn:hover [data-lucide] {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: transparent !important;
+  animation: none !important;
+  opacity: 1 !important;
 }
 
 .nav-container {
