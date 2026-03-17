@@ -143,13 +143,12 @@ body {
   height: 20px !important;
   stroke-width: 2.5px !important;
   color: var(--primary) !important;
-  animation: iconBounce 2s infinite ease-in-out !important;
 }
-
 @keyframes iconBounce {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.2) rotate(5deg); }
 }
+
 
 #navbar .nav-actions .training-btn:hover,
 .navbar .nav-actions .training-btn:hover,

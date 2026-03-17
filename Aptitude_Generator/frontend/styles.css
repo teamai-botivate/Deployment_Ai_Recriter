@@ -56,7 +56,6 @@ body {
     border-bottom: 1px solid rgba(0,0,0,0.05);
 }
 
-<<<<<<< HEAD
 /* --- Training Video Premium Force --- */
 #navbar .nav-actions .training-btn,
 .navbar .nav-actions .training-btn,
@@ -87,32 +86,6 @@ body {
     stroke-width: 2.5px !important;
     color: var(--primary) !important;
     animation: iconBounce 2s infinite ease-in-out !important;
-=======
-.training-btn {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 22px;
-    font-size: 0.88rem;
-    font-weight: 700;
-    color: var(--primary);
-    text-decoration: none;
-    border-radius: 50px;
-    background: rgba(99, 102, 241, 0.08);
-    border: 1.5px solid rgba(99, 102, 241, 0.2);
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.05);
-    position: relative;
-    overflow: hidden;
-    cursor: pointer;
-}
-
-.training-btn i {
-    width: 20px;
-    height: 20px;
-    stroke-width: 2.5px;
-    animation: iconBounce 2s infinite ease-in-out;
->>>>>>> 884a99a19d00157ba477a778e527253200da115a
 }
 
 @keyframes iconBounce {
@@ -120,12 +93,11 @@ body {
     50% { transform: scale(1.2) rotate(5deg); }
 }
 
-<<<<<<< HEAD
-/* Hover Effect - Match Theme Gradient */
 #navbar .nav-actions .training-btn:hover,
 .navbar .nav-actions .training-btn:hover,
 .training-btn:hover {
     background: linear-gradient(135deg, var(--primary), var(--secondary), var(--accent)) !important;
+    color: #ffffff !important;
     border-color: transparent !important;
     transform: translateY(-3px) scale(1.05) !important;
     box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4) !important;
@@ -152,19 +124,6 @@ body {
 .training-btn:hover, .training-btn:focus, .training-btn:active {
     text-decoration: none !important;
     color: white !important;
-=======
-.training-btn:hover {
-    background: linear-gradient(135deg, var(--primary), var(--secondary), var(--accent));
-    color: white !important;
-    border-color: transparent !important;
-    transform: translateY(-3px) scale(1.05);
-    box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4);
-}
-
-.training-btn:hover i {
-    color: white;
-    animation: none;
->>>>>>> 884a99a19d00157ba477a778e527253200da115a
 }
 
 .nav-container {
@@ -182,7 +141,6 @@ body {
 }
 
 #view-analysis-btn {
-<<<<<<< HEAD
     display: flex !important;
     align-items: center !important;
     gap: 8px !important;
@@ -202,13 +160,6 @@ body {
     color: var(--primary) !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05) !important;
-=======
-    padding: 10px 22px;
-    font-size: 0.88rem;
-    font-weight: 700;
-    border-radius: 50px;
-    border: 1.5px solid rgba(0, 0, 0, 0.1);
->>>>>>> 884a99a19d00157ba477a778e527253200da115a
 }
 
 .nav-links {
